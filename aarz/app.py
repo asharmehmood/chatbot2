@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python
 
 import urllib
@@ -35,15 +36,19 @@ def processRequest(req):
     city_names=processlocation(req)
     property_type=processPropertyType(req)
     maximum_valu=processMaximum(req)
+    price_unit=processPriceUnit(req)
     max_area=processAreaMax(req)
     unit_property=processUnits(req)
 
-    maximum_value=convertMaximum(maximum_valu)
+    maximum_value=convertMaximum(maximum_valu, price_unit)
+    print(maximum_value)
 
     #baseurl = "https://aarz.pk/bot/index.php?city_name="+city_names+"&sector_name="+sector_names+"&minPrice="+maximum_value+"&type="+property_type+"&LatestProperties="+latest+"&UnitArea="+area_property+"&Unit="+unit_property+"&school="+school+"&airport="+airport+"&transport="+transport+"&security="+security+"&shopping_mall="+malls+"&fuel="+fuel
     #baseurl="https://www.aarz.pk/search/bot?postedBy=searchPage&view=&city_s="+city_names+"&price_min="+maximum_value+"&price_max=0estate_agent=&purpose=Sell&property_type="+property_type
-
-    baseurl="https://www.aarz.pk/search/bot?postedBy=searchPage&view=&city_s="+city_names+"&type="+property_type+"&price_max="+maximum_value+"&land_area="+unit_property+"&min_r=0&max_r="+max_area
+    if maximum_value == 0:
+        baseurl="https://www.aarz.pk/search/bot?postedBy=searchPage&view=&city_s="+city_names+"&type="+property_type+"&land_area="+unit_property+"&min_r=0&max_r="+max_area
+    else:  
+        baseurl="https://www.aarz.pk/search/bot?postedBy=searchPage&view=&city_s="+city_names+"&type="+property_type+"&price_max="+maximum_value+"&land_area="+unit_property+"&min_r=0&max_r="+max_area
     #print("city:",city_names)
     print("url is:",baseurl)
     result = urllib.request.urlopen(baseurl).read()
@@ -72,12 +77,20 @@ def processlocation(req):
 
     return city
 
-
+#Price and Unit
 def processMaximum(req):
     result = req.get("result")
     parameters = result.get("parameters")
-    maximum = parameters.get("PriceRange")
+    act_pri = parameters.get("actual_price")
+
+    maximum = act_pri.get("number")
     return maximum
+
+def processPriceUnit(req):
+    result = req.get("result")
+    parameters = result.get("parameters")
+    price_unit = parameters.get("price_unit")
+    return price_unit
 
 def processMinimum(req):
     result = req.get("result")
@@ -101,6 +114,7 @@ def processUnits(req):
     result = req.get("result")
     parameters = result.get("parameters")
     units = parameters.get("Unit")
+    print(units)
     return units
 
 def processProjectName(req):
@@ -110,27 +124,20 @@ def processProjectName(req):
     return project_name 
 
 #Price
-def convertMaximumIfWords(req):
-    price, unitt = req.split()
-    price = int(price)
-    if unitt[0] == 'l' or unitt[0] == 'L':
+def convertMaximum(pric, unit):
+    print(pric)
+    price = int(pric)
+    print(price)
+    if unit[0] == 'z':
+        price = int(pric)
+    elif unit[0] == 'l' or unit[0] == 'L':
         price = price * (10 ** 5)
-    elif unitt[0] == 'm' or unitt[0] == 'M':
+    elif unit[0] == 'm' or unit[0] == 'M':
         price = price * (10 ** 6)
-    elif unitt[0] == 'c' or unitt[0] == 'C':
+    elif unit[0] == 'c' or unit[0] == 'C':
         price = price * (10 ** 7)
-
+    print(price)
     return str(price)
-
-def convertMaximumIfNumber(req):
-    price=int(req)
-    return str(price)
-
-def convertMaximum(maximum_valu):
-    try:
-        convertMaximumIfNumber(maximum_valu)
-    except ValueError:
-        convertMaximumIfWords(maximum_valu)
 
 def makeWebhookResult(data):
      i=0
@@ -149,6 +156,8 @@ def makeWebhookResult(data):
         row_id[i]=data[i]['property_id']
         row_title[i]=data[i]['title']
         row_location[i]=data[i]['address']
+        if row_location[i] == "" or row_location[i] == " ":
+            row_location[i] = "not specified"
         row_price[i]=data[i]['price']
         row_slug[i]=data[i]['slug']
         row_number[i]=data[i]['number']
@@ -159,22 +168,97 @@ def makeWebhookResult(data):
         text_data_parts ="Here is record " + str(i+1) +":"+ row_title[i]+" in city "+row_city[i] + " price is "+ str(row_price[i])+ ". For Info about this contact at number "+str(row_number[i]) + "."
         text_data = text_data + text_data_parts	
         i+=1
+     print(row_title[0])
      variable1=str(row_number[0])
      variable2=str(row_number[1])
      variable3=str(row_number[2])
      variable4=str(row_number[3]) 
      #print('speech Data',speech_data)
      #print('Text Data',text_data)
-     message={
+     if length==1:
+                 message={
                    "attachment":{
                     "type":"template",
                        "payload":{
             "template_type":"generic",
             "elements":[
           {
+             "title":row_title[0],
+              "subtitle":row_location[0],
+              "subtitle":"Price: Rs."+str(row_price[0]),
+                "item_url": "https://www.aarz.pk/property-detail/"+row_slug[0],               
+               "image_url":"https://www.aarz.pk/"+row_image[0] ,
+             "buttons":[
+              {
+              "type":"phone_number",
+              "title":"Call Agent",
+              "payload":"+92"+variable1[1:]
+              },
+                 {
+                "type":"element_share"
+                  }
+            ]
+          }
+        ]
+      }
+    }
+  }
+     elif length==2:
+         message= {
+         "attachment": {
+           "type": "template",
+            "payload": {
+               "template_type": "generic",
+               "elements": [{
                "title": row_title[0],
-               "subtitle": row_location[0]+"\nPrice: Rs."+str(row_price[0]),
-              "item_url": "https://www.aarz.pk/property-detail/"+row_slug[0],               
+                "subtitle":row_location[0],
+              "subtitle":"Price: Rs."+str(row_price[0]),
+                "item_url": "https://www.aarz.pk/property-detail/"+row_slug[0],               
+               "image_url":"https://www.aarz.pk/"+row_image[0]  ,
+                "buttons": [{
+                "type":"phone_number",
+              "title":"Call Agent",
+             "payload":"+92"+variable1[1:]
+                },
+                    {
+                "type":"element_share"
+                    
+                    }, 
+                   ],
+          }, 
+                   {
+                "title": row_title[1],
+                 "subtitle":row_location[0],
+              "subtitle":"Price: Rs."+str(row_price[0]),
+                 "item_url": "https://www.aarz.pk/property-detail/"+row_slug[1],               
+               "image_url":"https://www.aarz.pk/"+row_image[1]  ,
+                "buttons": [{
+                "type":"phone_number",
+              "title":"Call Agent",
+             "payload":"+92"+variable2[1:]
+            },
+                     {
+                "type":"element_share"
+                    
+                    }, 
+                   ]
+          }]
+            
+        }
+      }
+    }
+     else:
+         message= {
+         "attachment": {
+           "type": "template",
+            "payload": {
+               "template_type": "generic",
+               "elements": [
+                   {
+               "title": row_title[0],
+                "subtitle":row_location[0],
+              "subtitle":"Price: Rs."+str(row_price[0]),
+                "item_url": "https://www.aarz.pk/property-detail/"+row_slug[0],               
                "image_url":"https://www.aarz.pk/"+row_image[0]  ,
                 "buttons": [{
                 "type":"phone_number",
@@ -189,7 +273,8 @@ def makeWebhookResult(data):
           }, 
                    {
                "title": row_title[1],
-               "subtitle": row_location[1]+"\nPrice: Rs."+str(row_price[1]),
+               "subtitle":row_location[0],
+              "subtitle":"Price: Rs."+str(row_price[0]),
                 "item_url": "https://www.aarz.pk/property-detail/"+row_slug[1],               
                "image_url":"https://www.aarz.pk/"+row_image[1]  ,
                 "buttons": [{
@@ -205,7 +290,8 @@ def makeWebhookResult(data):
           }, 
                    {
                "title": row_title[2],
-               "subtitle": row_location[2]+"\nPrice: Rs."+str(row_price[2]),
+                "subtitle":row_location[0],
+              "subtitle":"Price: Rs."+str(row_price[0]),
                 "item_url": "https://www.aarz.pk/property-detail/"+row_slug[2],               
                "image_url":"https://www.aarz.pk/"+row_image[2]  ,
                 "buttons": [{
@@ -218,27 +304,11 @@ def makeWebhookResult(data):
                     
                     }, 
                    ],
-          }, 
-                   {
-                "title": row_title[3],
-                "subtitle": row_location[3]+"\nPrice: Rs."+str(row_price[3]),
-                 "item_url": "https://www.aarz.pk/property-detail/"+row_slug[3],               
-               "image_url":"https://www.aarz.pk/"+row_image[3]  ,
-                "buttons": [{
-               "type":"phone_number",
-              "title":"Call Agent",
-              "payload":"+92"+variable4[1:]
-            },
-                     {
-                "type":"element_share"
-                    
-                    }, 
-                   ]
-}]
+          }
+               ]
+            }
          }
-       }
-     }
-
+}
      return {
         "speech": text_data,
         "displayText": text_data,
@@ -251,6 +321,4 @@ if __name__ == '__main__':
 
     print("Starting app on port %d" % port)
 
-    app.run(debug=True, port=port, host='0.0.0.0')
-
-
+app.run(debug=True, port=port, host='0.0.0.0')
